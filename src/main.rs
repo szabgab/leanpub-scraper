@@ -102,6 +102,24 @@ async fn main() -> Result<(), playwright::Error> {
     let user_indicator: Option<String> = page.eval(r#"() => { const el = document.querySelector('[data-test=\"user-menu\"]') || document.querySelector('.user-menu'); return el ? el.textContent : null; }"#).await.unwrap_or(None);
     if let Some(ind) = user_indicator { println!("User indicator snippet: {}", ind.trim()); }
 
+    // Navigate to published books page to verify login success
+    const PUBLISHED_URL: &str = "https://leanpub.com/author_dashboard/books/published";
+    // Only attempt if we think we might be logged in (heuristic: presence of authenticity token already used)
+    if !email.is_empty() {
+        if let Err(e) = page.goto_builder(PUBLISHED_URL).goto().await { eprintln!("Navigation to published books page failed: {}", e); }
+        // Small wait for page to load dynamic content
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let final_url: String = page.eval("() => location.href").await.unwrap_or_default();
+        let published_title: String = page.eval("() => document.title").await.unwrap_or_default();
+        println!("Final URL: {}", final_url);
+        println!("Final Title: {}", published_title);
+        if final_url == PUBLISHED_URL && published_title.trim() == "Leanpub - Your Books" {
+            println!("Login success verified: reached published books page.");
+        } else {
+            eprintln!("Login verification failed: expected URL {} with title 'Leanpub - Your Books'.", PUBLISHED_URL);
+        }
+    }
+
 
 
     Ok(())
