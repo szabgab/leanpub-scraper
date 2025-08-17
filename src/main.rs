@@ -10,6 +10,9 @@ struct FormField {
     field_type: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct BookLink { slug: String, title: String }
+
 /// Verify that the login succeeded by navigating to the published books page
 /// and checking both the final URL and the page title. Returns true on success.
 pub async fn verify_login(page: &Page) -> Result<bool, playwright::Error> {
@@ -30,6 +33,31 @@ pub async fn verify_login(page: &Page) -> Result<bool, playwright::Error> {
         eprintln!("Login verification failed: expected URL {} with title 'Leanpub - Your Books'.", PUBLISHED_URL);
     }
     Ok(success)
+}
+
+/// After a successful login (and while on the published books page) collect slug/title pairs.
+pub async fn fetch_published_books(page: &Page) -> Result<Vec<BookLink>, playwright::Error> {
+    // JavaScript executed in page to find links whose path ends with /overview (book overview pages)
+    let js = r#"() => {
+        const anchors = Array.from(document.querySelectorAll('a[href]'));
+        const out = [];
+        for (const a of anchors) {
+            const href = a.getAttribute('href') || '';
+            try {
+                const url = new URL(href, location.origin);
+                if(!url.pathname.endsWith('/overview')) continue;
+                const slug = url.pathname.replace(/^\//,'').replace(/\/overview$/,'');
+                if(!slug || slug.includes('/')) continue; // ensure single segment slug
+                const title = (a.textContent || '').trim();
+                if(!title) continue;
+                // avoid duplicates (keep first)
+                if(!out.find(e => e.slug === slug)) out.push({ slug, title });
+            } catch(e) { /* ignore malformed */ }
+        }
+        return out;
+    }"#;
+    let books: Vec<BookLink> = page.eval(js).await?;
+    Ok(books)
 }
 
 /// Perform the entire login flow: load login page, wait for reCAPTCHA, submit credentials, verify dashboard.
@@ -125,7 +153,23 @@ pub async fn login() -> Result<(), playwright::Error> {
     let user_indicator: Option<String> = page.eval(r#"() => { const el = document.querySelector('[data-test=\"user-menu\"]') || document.querySelector('.user-menu'); return el ? el.textContent : null; }"#).await.unwrap_or(None);
     if let Some(ind) = user_indicator { println!("User indicator snippet: {}", ind.trim()); }
 
-    if !email.is_empty() { let _ = verify_login(&page).await?; }
+    if !email.is_empty() {
+        match verify_login(&page).await? {
+            true => {
+                match fetch_published_books(&page).await {
+                    Ok(list) => {
+                        println!("Published books ({}):", list.len());
+                        for b in list { println!("  {} => {}", b.slug, b.title); }
+                    }
+                    Err(e) => eprintln!("Failed to fetch published books: {}", e),
+                }
+            }
+            false => {
+                eprintln!("Login failed; exiting.");
+                return Ok(());
+            }
+        }
+    }
 
 
 

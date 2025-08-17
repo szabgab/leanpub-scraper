@@ -17,4 +17,5 @@ This is a command-line application accessing the https://leanpub.com/ web site a
 - Use the saved cookie for the following requests
 - List all the published books authored by the logged in user via this page: https://leanpub.com/author_dashboard/books/published
 - List all the unpublished books authored by the logged in user via this page:  https://leanpub.com/author_dashboard/books/unpublished
+    - Each book has a link https://leanpub.com/slug/overview 
 - List the categories of all the books authored by the logged in user. For each book use this URL where SLUG is the URL of each book https://leanpub.com/SLUG/book_categories
