@@ -32,8 +32,8 @@ pub async fn verify_login(page: &Page) -> Result<bool, playwright::Error> {
     Ok(success)
 }
 
-#[tokio::main]
-async fn main() -> Result<(), playwright::Error> {
+/// Perform the entire login flow: load login page, wait for reCAPTCHA, submit credentials, verify dashboard.
+pub async fn login() -> Result<(), playwright::Error> {
     let playwright = Playwright::initialize().await?;
     playwright.prepare()?; // Install browsers
     let chromium = playwright.chromium();
@@ -130,5 +130,10 @@ async fn main() -> Result<(), playwright::Error> {
 
 
     Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<(), playwright::Error> {
+    login().await
 }
 
