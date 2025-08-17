@@ -11,7 +11,10 @@ struct FormField {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct BookLink { slug: String, title: String }
+pub struct BookLink {
+    slug: String,
+    title: String,
+}
 
 /// Verify that the login succeeded by navigating to the published books page
 /// and checking both the final URL and the page title. Returns true on success.
@@ -30,7 +33,10 @@ pub async fn verify_login(page: &Page) -> Result<bool, playwright::Error> {
     if success {
         println!("Login success verified: reached published books page.");
     } else {
-        eprintln!("Login verification failed: expected URL {} with title 'Leanpub - Your Books'.", PUBLISHED_URL);
+        eprintln!(
+            "Login verification failed: expected URL {} with title 'Leanpub - Your Books'.",
+            PUBLISHED_URL
+        );
     }
     Ok(success)
 }
@@ -68,10 +74,13 @@ pub async fn login() -> Result<(), playwright::Error> {
     let browser = chromium.launcher().headless(true).launch().await?;
     let context = browser.context_builder().build().await?;
     let page = context.new_page().await?;
-    page.goto_builder("https://leanpub.com/login").goto().await?;
+    page.goto_builder("https://leanpub.com/login")
+        .goto()
+        .await?;
 
     // Wait for JS to populate the g-recaptcha hidden field (polling up to ~15s)
-    for attempt in 0..30 { // 30 * 500ms = 15s max
+    for attempt in 0..30 {
+        // 30 * 500ms = 15s max
         let captcha_val: String = page
             .eval(r#"() => {
                 const el = document.querySelector("input[name^='g-recaptcha-response'], textarea[name='g-recaptcha-response'], input[name^='g-recaptcha-response-data']");
@@ -80,10 +89,16 @@ pub async fn login() -> Result<(), playwright::Error> {
             .await
             .unwrap_or_default();
         if !captcha_val.is_empty() {
-            println!("reCAPTCHA field populated after {} attempt(s) (~{} ms)", attempt + 1, (attempt + 1) * 500);
+            println!(
+                "reCAPTCHA field populated after {} attempt(s) (~{} ms)",
+                attempt + 1,
+                (attempt + 1) * 500
+            );
             break;
         }
-        if attempt == 29 { println!("reCAPTCHA field not populated within timeout; proceeding anyway."); }
+        if attempt == 29 {
+            println!("reCAPTCHA field not populated within timeout; proceeding anyway.");
+        }
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
 
@@ -102,26 +117,34 @@ pub async fn login() -> Result<(), playwright::Error> {
     let fields: Vec<FormField> = page.eval(js).await?;
     println!("Found {} input fields in login form:", fields.len());
     for f in &fields {
-        println!("  name='{}' type='{}' value='{}'", f.name, f.field_type, f.value);
+        println!(
+            "  name='{}' type='{}' value='{}'",
+            f.name, f.field_type, f.value
+        );
     }
 
     // Optionally locate the form action attribute
     let form_action: Option<String> = page.eval("() => { const f = document.querySelector('form'); return f ? f.getAttribute('action') : null; }").await?;
-    if let Some(action) = form_action { println!("Form action: {}", action); }
+    if let Some(action) = form_action {
+        println!("Form action: {}", action);
+    }
 
     // Load credentials from environment
     dotenvy::dotenv().ok();
     let email = std::env::var("LEANPUB_EMAIL").unwrap_or_default();
     let password = std::env::var("LEANPUB_PASSWORD").unwrap_or_default();
     if email.is_empty() || password.is_empty() {
-        eprintln!("LEANPUB_EMAIL or LEANPUB_PASSWORD missing in environment; skipping form submission.");
+        eprintln!(
+            "LEANPUB_EMAIL or LEANPUB_PASSWORD missing in environment; skipping form submission."
+        );
         return Ok(());
     }
 
     // Escape single quotes for JS embedding
     let safe_email = email.replace('\'', "\\'");
     let safe_password = password.replace('\'', "\\'");
-    let fill_and_submit = format!(r#"() => {{
+    let fill_and_submit = format!(
+        r#"() => {{
         const emailInput = document.querySelector("input[name='session[email]']");
         if(emailInput) emailInput.value = '{email}';
         const pwInput = document.querySelector("input[name='session[password]']");
@@ -132,15 +155,24 @@ pub async fn login() -> Result<(), playwright::Error> {
             if(btn) btn.click(); else form.submit();
         }}
         return !!(emailInput && pwInput);
-    }}"#, email=safe_email, password=safe_password);
+    }}"#,
+        email = safe_email,
+        password = safe_password
+    );
 
     let filled: bool = page.eval(&fill_and_submit).await?;
-    if filled { println!("Filled credentials and submitted form."); } else { eprintln!("Failed to locate form fields to fill."); }
+    if filled {
+        println!("Filled credentials and submitted form.");
+    } else {
+        eprintln!("Failed to locate form fields to fill.");
+    }
 
     // Poll for navigation / dashboard appearance
-    for _ in 0..20 { // up to ~10s
+    for _ in 0..20 {
+        // up to ~10s
         let url: String = page.eval("() => location.href").await.unwrap_or_default();
-        if url.contains("author_dashboard") || url.contains("/u/") { // heuristic
+        if url.contains("author_dashboard") || url.contains("/u/") {
+            // heuristic
             println!("Login likely successful. Current URL: {}", url);
             break;
         }
@@ -151,27 +183,27 @@ pub async fn login() -> Result<(), playwright::Error> {
     let title: String = page.eval("() => document.title").await.unwrap_or_default();
     println!("Page title after submit: {}", title);
     let user_indicator: Option<String> = page.eval(r#"() => { const el = document.querySelector('[data-test=\"user-menu\"]') || document.querySelector('.user-menu'); return el ? el.textContent : null; }"#).await.unwrap_or(None);
-    if let Some(ind) = user_indicator { println!("User indicator snippet: {}", ind.trim()); }
+    if let Some(ind) = user_indicator {
+        println!("User indicator snippet: {}", ind.trim());
+    }
 
     if !email.is_empty() {
         match verify_login(&page).await? {
-            true => {
-                match fetch_published_books(&page).await {
-                    Ok(list) => {
-                        println!("Published books ({}):", list.len());
-                        for b in list { println!("  {} => {}", b.slug, b.title); }
+            true => match fetch_published_books(&page).await {
+                Ok(list) => {
+                    println!("Published books ({}):", list.len());
+                    for b in list {
+                        println!("  {} => {}", b.slug, b.title);
                     }
-                    Err(e) => eprintln!("Failed to fetch published books: {}", e),
                 }
-            }
+                Err(e) => eprintln!("Failed to fetch published books: {}", e),
+            },
             false => {
                 eprintln!("Login failed; exiting.");
                 return Ok(());
             }
         }
     }
-
-
 
     Ok(())
 }
@@ -180,4 +212,3 @@ pub async fn login() -> Result<(), playwright::Error> {
 async fn main() -> Result<(), playwright::Error> {
     login().await
 }
-
